@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <string>
 #include <memory>
 #include <atomic>
 #include <vector>
@@ -31,11 +32,11 @@ private:
 	SOCKADDR_IN serverAddr;
 	std::vector<std::thread> completionThreads;
 
-	concurrency::concurrent_unordered_set<std::string, HANDLE> sessionSet;
+	concurrency::concurrent_unordered_set<int, SOCKET> sessionSet;
 
 	HANDLE CreateIOCP();
 
-	void MakeWorkingThreads(const DWORD& numOfThread);
+	void MakeWorkingThreads();
 
 	bool MakeSocket(SOCKET& socket);
 

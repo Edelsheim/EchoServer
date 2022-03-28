@@ -58,17 +58,50 @@ bool IOCPServer::Run()
 
 	// listen socket
 	if (!this->ListenSocket(this->listenSocket, SOMAXCONN)) {
-		std::cout << "listen socket fail" << std::endl;
+		std::cout << "Listen socket fail" << std::endl;
 		std::cout << ::GetLastError() << std::endl;
 		::closesocket(this->listenSocket);
 		return false;
 	}
 
 	// disable accept to listen socket
-	BOOL on = true;
-	this->SetSocketOpt(this->listenSocket, SO_CONDITIONAL_ACCEPT, reinterpret_cast<char*>(&on));
+	//BOOL on = true;
+	//this->SetSocketOpt(this->listenSocket, SO_CONDITIONAL_ACCEPT, reinterpret_cast<char*>(&on));
+
+
+	// create GetQueuedCompletionStatus thread
+	this->MakeWorkingThreads();
 
 	// accept
+	while (true) {
+		SOCKADDR_IN client_addr;
+		INT addr_len = sizeof(client_addr);
+		SOCKET client = WSAAccept(this->listenSocket, (sockaddr*)&client_addr, &addr_len, NULL, NULL);
+		if (client == SOCKET_ERROR) {
+			std::cout << "Accept client fail" << std::endl;
+			std::cout << ::GetLastError() << std::endl;
+			continue;
+		}
+
+
+		// do something
+		//
+
+		int id = *(&client);
+		if (this->sessionSet.insert(std::make_pair(id, client)).second == true) {
+			this->WatchSocket(client, id);
+
+			WSABUF buf;
+			DWORD trans_bytes = 0;
+			DWORD flag = 0;
+			WSAOVERLAPPED overlapped;
+			WSARecv(client, &buf, 1, &trans_bytes, &flag, &overlapped, NULL);
+		}
+		else {
+			std::cout << "Watch client " << id << " fail" << std::endl;
+			std::cout << ::GetLastError() << std::endl;
+		}
+	}
 	
 
 	for (std::thread& th : this->completionThreads)
@@ -81,9 +114,13 @@ HANDLE IOCPServer::CreateIOCP()
 	return ::CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0, 0, 0);
 }
 
-void IOCPServer::MakeWorkingThreads(const DWORD& numOfThread)
+void IOCPServer::MakeWorkingThreads()
 {
-	for (DWORD i = 0; i != numOfThread; i++)
+	SYSTEM_INFO system_info;
+	::GetSystemInfo(&system_info);
+	DWORD num_of_thread = system_info.dwNumberOfProcessors;
+
+	for (DWORD i = 0; i != num_of_thread; i++)
 		this->completionThreads.push_back(std::thread(&IOCPServer::CompletionThread, this));
 }
 
@@ -141,6 +178,27 @@ bool IOCPServer::WatchSocket(const SOCKET& socket, const DWORD& watchKey)
 
 DWORD __stdcall IOCPServer::CompletionThread()
 {
+	while (true) {
+		DWORD bytes_transferred = 0;
+		ULONG_PTR session_id = 0;
+		OVERLAPPED overlapped;
+
+		BOOL check = GetQueuedCompletionStatus(
+			this->iocp,
+			&bytes_transferred,
+			&session_id,
+			reinterpret_cast<LPOVERLAPPED*>(&overlapped),
+			INFINITE
+		);
+
+		if (check == FALSE && bytes_transferred == 0) {
+			std::cout << ::GetLastError() << std::endl;
+			Sleep(1);
+			continue;
+		}
+
+		printf("Completion\n");
+	}
 	return 0;
 }
 
