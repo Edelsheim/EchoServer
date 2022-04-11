@@ -8,13 +8,17 @@
 #include <thread>
 
 // session
-#include <concurrent_unordered_set.h>
+#include <concurrent_unordered_map.h>
 
 #include <WinSock2.h>
 #include <WS2tcpip.h>
 #include <MSWSock.h>
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "mswsock.lib")
+
+struct SOCKETOVERLAPPED : public WSAOVERLAPPED {
+	WSABUF buff;
+};
 
 class IOCPServer
 {
@@ -32,7 +36,7 @@ private:
 	SOCKADDR_IN serverAddr;
 	std::vector<std::thread> completionThreads;
 
-	concurrency::concurrent_unordered_set<int, SOCKET> sessionSet;
+	std::unique_ptr<concurrency::concurrent_unordered_map<ULONG_PTR, SOCKET>> session;
 
 	HANDLE CreateIOCP();
 
@@ -46,7 +50,7 @@ private:
 
 	bool SetSocketOpt(SOCKET& socket, const int& opt, const char* buff);
 
-	bool WatchSocket(const SOCKET& socket, const DWORD& watchKey);
+	bool WatchSocket(const SOCKET& socket, const ULONG_PTR& watchKey);
 
 	// thread call
 	DWORD __stdcall CompletionThread();
