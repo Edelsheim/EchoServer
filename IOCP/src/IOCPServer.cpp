@@ -65,18 +65,14 @@ bool IOCPServer::Run()
 		return false;
 	}
 
-	// disable accept to listen socket
-	//BOOL on = true;
-	//this->SetSocketOpt(this->listenSocket, SO_CONDITIONAL_ACCEPT, reinterpret_cast<char*>(&on));
-
-
 	// create GetQueuedCompletionStatus thread
 	this->MakeWorkingThreads();
 
+	std::cout << "Server listen port : " << this->serverPort << std::endl;
 	// accept
 	while (true) {
 		SOCKADDR_IN client_addr;
-		INT addr_len = sizeof(client_addr);
+		INT addr_len = sizeof(SOCKADDR_IN);
 
 		std::cout << "Ready accept client" << std::endl;
 		SOCKET client = WSAAccept(this->listenSocket, (sockaddr*)&client_addr, &addr_len, NULL, NULL);
@@ -94,18 +90,21 @@ bool IOCPServer::Run()
 				closesocket(client);
 				continue;
 			}
+			id++;
 
 			SOCKETOVERLAPPED socket_overlapped;
 			ZeroMemory(&socket_overlapped, sizeof(SOCKETOVERLAPPED));
-			socket_overlapped.buff.len = 0;
-			socket_overlapped.buff.buf = { 0, };
-
+			socket_overlapped.buff.len = 2048;
+			socket_overlapped.buff.buf = socket_overlapped.message;
 			DWORD trans_bytes = 0;
 			DWORD flag = 0;
-			volatile int a = ::WSARecv(client, &socket_overlapped.buff, 1, &trans_bytes, &flag, &socket_overlapped, NULL);
-			if (a == SOCKET_ERROR && (ERROR_IO_PENDING != WSAGetLastError())) {
-				printf("Accept Recv error\n");
-				closesocket(client);
+			volatile int a = ::WSARecv(client, &(socket_overlapped.buff), 1, &trans_bytes, &flag, &socket_overlapped, NULL);
+			if (a == SOCKET_ERROR) {
+				int last_error = WSAGetLastError();
+				if (ERROR_IO_PENDING != last_error) {
+					printf("Accept Recv error\n");
+					closesocket(client);
+				}
 			}
 		}
 		else {
@@ -185,22 +184,18 @@ bool IOCPServer::WatchSocket(const SOCKET& socket, const ULONG_PTR& watchKey)
 	}
 }
 
-
 DWORD __stdcall IOCPServer::CompletionThread()
 {
 	while (true) {
 		DWORD bytes_transferred = 0;
 		ULONG_PTR session_id = 0;
-		SOCKETOVERLAPPED overlapped;
-		ZeroMemory(&overlapped, sizeof(SOCKETOVERLAPPED));
-		overlapped.buff.len = 1024;
-		overlapped.buff.buf = { 0, };
+		SOCKETOVERLAPPED* overlapped;
 
 		BOOL check = GetQueuedCompletionStatus(
 			this->iocp,
 			&bytes_transferred,
 			&session_id,
-			reinterpret_cast<LPOVERLAPPED*>(&overlapped),
+			(LPOVERLAPPED*)(&overlapped),
 			INFINITE
 		);
 
@@ -217,17 +212,23 @@ DWORD __stdcall IOCPServer::CompletionThread()
 			continue;
 		}
 		else {
-			std::string data = std::string(overlapped.buff.buf);
+			std::string data = std::string(overlapped->buff.buf);
 			printf("(%lld) data : %s\n", session_id, data.c_str());
 
 			SOCKET session_socket = this->session->find(static_cast<int>(session_id))->second;
-			DWORD flag = 0;
-			::WSASend(session_socket, &overlapped.buff, 1, &bytes_transferred, flag, &overlapped, 0);
 
-			ZeroMemory(overlapped.buff.buf, sizeof(CHAR));
-			overlapped.buff.len = 0;
-			bytes_transferred = 0;
-			::WSARecv(session_socket, &overlapped.buff, 1, &bytes_transferred, &flag, &overlapped, 0);
+			overlapped->buff.len = (ULONG)data.length();
+			overlapped->buff.buf = (CHAR*)data.c_str();
+
+			DWORD flag = 0;
+			int send_check = ::WSASend(session_socket, &(overlapped->buff), 1, &flag, 0, NULL, NULL);
+
+			ZeroMemory(overlapped, sizeof(SOCKETOVERLAPPED));
+			ZeroMemory(overlapped->message, 2048);
+			overlapped->buff.len = 2048;
+			overlapped->buff.buf = overlapped->message;
+			flag = 0;
+			::WSARecv(session_socket, &overlapped->buff, 1, &bytes_transferred, &flag, overlapped, NULL);
 		}
 	}
 	return 0;

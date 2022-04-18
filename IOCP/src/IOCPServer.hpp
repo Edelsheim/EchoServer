@@ -18,6 +18,7 @@
 
 struct SOCKETOVERLAPPED : public WSAOVERLAPPED {
 	WSABUF buff;
+	char message[2048];
 };
 
 class IOCPServer
