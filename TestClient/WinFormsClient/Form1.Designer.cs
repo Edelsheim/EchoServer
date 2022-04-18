@@ -34,6 +34,7 @@
             this.input_textbox = new System.Windows.Forms.TextBox();
             this.send_button = new System.Windows.Forms.Button();
             this.close_button = new System.Windows.Forms.Button();
+            this.log_list = new System.Windows.Forms.ListBox();
             this.SuspendLayout();
             // 
             // ip_textbox
@@ -90,11 +91,21 @@
             this.close_button.UseVisualStyleBackColor = true;
             this.close_button.Click += new System.EventHandler(this.close_button_Click);
             // 
+            // log_list
+            // 
+            this.log_list.FormattingEnabled = true;
+            this.log_list.ItemHeight = 12;
+            this.log_list.Location = new System.Drawing.Point(12, 132);
+            this.log_list.Name = "log_list";
+            this.log_list.Size = new System.Drawing.Size(279, 364);
+            this.log_list.TabIndex = 6;
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(974, 501);
+            this.Controls.Add(this.log_list);
             this.Controls.Add(this.close_button);
             this.Controls.Add(this.send_button);
             this.Controls.Add(this.input_textbox);
@@ -116,6 +127,7 @@
         private System.Windows.Forms.TextBox input_textbox;
         private System.Windows.Forms.Button send_button;
         private System.Windows.Forms.Button close_button;
+        private System.Windows.Forms.ListBox log_list;
     }
 }
 
