@@ -71,18 +71,18 @@ bool IOCPServer::Run()
 	std::cout << "Server listen port : " << this->serverPort << std::endl;
 	// accept
 	while (true) {
-		SOCKADDR_IN client_addr;
+		SOCKADDR_IN client_addr{};
 		INT addr_len = sizeof(SOCKADDR_IN);
 
 		std::cout << "Ready accept client" << std::endl;
-		SOCKET client = WSAAccept(this->listenSocket, (sockaddr*)&client_addr, &addr_len, NULL, NULL);
+		SOCKET client = ::WSAAccept(this->listenSocket, (sockaddr*)&client_addr, &addr_len, NULL, NULL);
 		if (client == SOCKET_ERROR) {
 			std::cout << "Accept client fail" << std::endl;
 			std::cout << ::GetLastError() << std::endl;
 			continue;
 		}
 
-		static ULONG_PTR id = 0; // client id?????
+		static size_t id = 0; // client id?????
 		if (this->session->insert(std::make_pair(id, client)).second == true) {
 			printf("Session insert id : %lld\n", id);
 			if (this->WatchSocket(client, id) == false) {
@@ -98,7 +98,7 @@ bool IOCPServer::Run()
 			socket_overlapped.buff.buf = socket_overlapped.message;
 			DWORD trans_bytes = 0;
 			DWORD flag = 0;
-			volatile int a = ::WSARecv(client, &(socket_overlapped.buff), 1, &trans_bytes, &flag, &socket_overlapped, NULL);
+			int a = ::WSARecv(client, &(socket_overlapped.buff), 1, &trans_bytes, &flag, &socket_overlapped, NULL);
 			if (a == SOCKET_ERROR) {
 				int last_error = WSAGetLastError();
 				if (ERROR_IO_PENDING != last_error) {
@@ -201,6 +201,8 @@ DWORD __stdcall IOCPServer::CompletionThread()
 
 		if (check == FALSE) {
 			printf("%lld is status fail\n", session_id);
+			closesocket(this->session->find(static_cast<int>(session_id))->second);
+			this->session->find(static_cast<int>(session_id))->second = NULL;
 			Sleep(1);
 			continue;
 		}
