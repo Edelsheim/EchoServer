@@ -53,6 +53,8 @@ private:
 
 	bool WatchSocket(const SOCKET& socket, const ULONG_PTR& watchKey);
 
+	bool AcceptSocket(SOCKET& socket);
+
 	// thread call
 	DWORD __stdcall CompletionThread();
 };

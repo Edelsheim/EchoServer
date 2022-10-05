@@ -58,15 +58,19 @@ public:
 
 		SOCKADDR_IN server_addr;
 		ZeroMemory(&server_addr, sizeof(SOCKADDR_IN));
-		server_addr.sin_family = AF_INET;
 		inet_pton(AF_INET, ip.c_str(), &server_addr.sin_addr.S_un.S_addr);
+		server_addr.sin_family = AF_INET;
 		server_addr.sin_port = htons(port);
 
-		volatile int a = ::connect(this->client, reinterpret_cast<const sockaddr*>(&server_addr), sizeof(SOCKADDR_IN));
+		int a = ::connect(this->client, (const sockaddr*)&server_addr, sizeof(SOCKADDR_IN));
 		printf("connect : %d\n", a);
-
-		this->recvThread = std::make_unique<std::thread>(&IOCPClient::RecvRun, this);
-		return true;
+		if (a >= 0) {
+			this->recvThread = std::make_unique<std::thread>(&IOCPClient::RecvRun, this);
+			return true;
+		}
+		else {
+			return false;
+		}
 	}
 
 	const bool Send(std::string str) {
@@ -101,8 +105,10 @@ private:
 
 		while (this->recvThreadRun) {
 			char buf[2048] = {0, };
-			::recv(this->client, buf, 2048, 0);
-			this->handler(std::string(buf));
+			int recv_result = ::recv(this->client, buf, 2048, 0);
+
+			if (recv_result >= 0)
+				this->handler(std::string(buf));
 		}
 
 		return 0;

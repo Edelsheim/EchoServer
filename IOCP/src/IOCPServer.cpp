@@ -68,55 +68,7 @@ bool IOCPServer::Run()
 	// create GetQueuedCompletionStatus thread
 	this->MakeWorkingThreads();
 
-	std::cout << "Server listen port : " << this->serverPort << std::endl;
-	// accept
-	while (true) {
-		SOCKADDR_IN client_addr{};
-		INT addr_len = sizeof(SOCKADDR_IN);
-
-		std::cout << "Ready accept client" << std::endl;
-		SOCKET client = ::WSAAccept(this->listenSocket, (sockaddr*)&client_addr, &addr_len, NULL, NULL);
-		if (client == SOCKET_ERROR) {
-			std::cout << "Accept client fail" << std::endl;
-			std::cout << ::GetLastError() << std::endl;
-			continue;
-		}
-
-		static size_t id = 0; // client id?????
-		if (this->session->insert(std::make_pair(id, client)).second == true) {
-			printf("Session insert id : %lld\n", id);
-			if (this->WatchSocket(client, id) == false) {
-				printf("Session watch fail\n");
-				closesocket(client);
-				continue;
-			}
-			id++;
-
-			SOCKETOVERLAPPED socket_overlapped;
-			ZeroMemory(&socket_overlapped, sizeof(SOCKETOVERLAPPED));
-			socket_overlapped.buff.len = 2048;
-			socket_overlapped.buff.buf = socket_overlapped.message;
-			DWORD trans_bytes = 0;
-			DWORD flag = 0;
-			int a = ::WSARecv(client, &(socket_overlapped.buff), 1, &trans_bytes, &flag, &socket_overlapped, NULL);
-			if (a == SOCKET_ERROR) {
-				int last_error = WSAGetLastError();
-				if (ERROR_IO_PENDING != last_error) {
-					printf("Accept Recv error\n");
-					closesocket(client);
-				}
-			}
-		}
-		else {
-			std::cout << "Watch client " << id << " fail" << std::endl;
-			std::cout << ::GetLastError() << std::endl;
-		}
-	}
-	
-	for (std::thread& th : this->completionThreads)
-		th.join();
-
-	return true;
+	return this->AcceptSocket(this->listenSocket);
 }
 
 HANDLE IOCPServer::CreateIOCP()
@@ -175,13 +127,63 @@ bool IOCPServer::SetSocketOpt(SOCKET& socket, const int& opt, const char* buff)
 
 bool IOCPServer::WatchSocket(const SOCKET& socket, const ULONG_PTR& watchKey)
 {
-	HANDLE handle = CreateIoCompletionPort(reinterpret_cast<HANDLE>(socket), this->iocp, watchKey, 0);
-	if (handle == this->iocp) {
+	HANDLE handle = CreateIoCompletionPort((HANDLE)socket, this->iocp, watchKey, 0);
+	if (handle == this->iocp)
 		return true;
-	}
-	else {
+	else
 		return false;
+}
+
+bool IOCPServer::AcceptSocket(SOCKET& socket)
+{
+	std::cout << "Server listen port : " << this->serverPort << std::endl;
+	// accept
+	while (true) {
+		SOCKADDR_IN client_addr{};
+		INT addr_len = sizeof(SOCKADDR_IN);
+
+		std::cout << "Ready accept client" << std::endl;
+		SOCKET client = ::WSAAccept(socket, (sockaddr*)&client_addr, &addr_len, NULL, NULL);
+		if (client == SOCKET_ERROR) {
+			std::cout << "Accept client fail" << std::endl;
+			std::cout << ::GetLastError() << std::endl;
+			continue;
+		}
+
+		size_t id = (size_t)client; // client id?????
+		if (this->session->insert(std::make_pair(id, client)).second == true) {
+			printf("Session insert id : %lld\n", id);
+			if (this->WatchSocket(client, id) == false) {
+				printf("Session watch fail\n");
+				closesocket(client);
+				continue;
+			}
+
+			SOCKETOVERLAPPED socket_overlapped;
+			ZeroMemory(&socket_overlapped, sizeof(SOCKETOVERLAPPED));
+			socket_overlapped.buff.len = 2048;
+			socket_overlapped.buff.buf = socket_overlapped.message;
+			DWORD trans_bytes = 0;
+			DWORD flag = 0;
+			int a = ::WSARecv(client, &(socket_overlapped.buff), 1, &trans_bytes, &flag, &socket_overlapped, NULL);
+			if (a == SOCKET_ERROR) {
+				int last_error = WSAGetLastError();
+				if (ERROR_IO_PENDING != last_error) {
+					printf("Accept Recv error\n");
+					closesocket(client);
+				}
+			}
+		}
+		else {
+			std::cout << "Watch client " << id << " fail" << std::endl;
+			std::cout << ::GetLastError() << std::endl;
+		}
 	}
+
+	for (std::thread& th : this->completionThreads)
+		th.join();
+
+	return true;
 }
 
 DWORD __stdcall IOCPServer::CompletionThread()
@@ -189,7 +191,7 @@ DWORD __stdcall IOCPServer::CompletionThread()
 	while (true) {
 		DWORD bytes_transferred = 0;
 		ULONG_PTR session_id = 0;
-		SOCKETOVERLAPPED* overlapped;
+		SOCKETOVERLAPPED* overlapped {};
 
 		BOOL check = GetQueuedCompletionStatus(
 			this->iocp,
